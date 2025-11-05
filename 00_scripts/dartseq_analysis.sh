@@ -9,7 +9,7 @@
 #SBATCH --output="/home/plstenge/sphyrna_mokarran_dartseq/00_scripts/dartseq_analysis.out"
 
 # Script pour analyses DArTseq sur Sphyrna mokarran
-# Date: 2025-10-22
+# Date: 2025-11-05
 # Auteur: Pierre-Louis Stenger
 
 echo "=========================================="
@@ -17,9 +17,19 @@ echo "Démarrage de l'analyse DArTseq"
 echo "Date: $(date)"
 echo "=========================================="
 
-# Charger le module R si nécessaire
-# Décommenter la ligne suivante si R est chargé via module
-# module load R/4.3.0
+# Charger le module R (adapter selon votre cluster)
+# Vérifier les modules R disponibles avec: module avail R
+module load R/4.3.0 || module load R/4.2.0 || module load R/4.1.0 || module load R
+
+# Alternative si R est dans conda
+# module load miniconda3
+# source activate base
+
+# Vérifier que R est bien chargé
+echo "Vérification de R:"
+which R
+which Rscript
+R --version
 
 # Définir les chemins
 PROJECT_DIR="/home/plstenge/sphyrna_mokarran_dartseq"
