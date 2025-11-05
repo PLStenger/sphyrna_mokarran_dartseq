@@ -17,13 +17,9 @@ echo "Démarrage de l'analyse DArTseq"
 echo "Date: $(date)"
 echo "=========================================="
 
-# Charger le module R (adapter selon votre cluster)
-# Vérifier les modules R disponibles avec: module avail R
-module load R/4.3.0 || module load R/4.2.0 || module load R/4.1.0 || module load R
-
-# Alternative si R est dans conda
-# module load miniconda3
-# source activate base
+# Charger miniconda3 (déjà présent sur ton système)
+module load miniconda3
+source activate base
 
 # Vérifier que R est bien chargé
 echo "Vérification de R:"
