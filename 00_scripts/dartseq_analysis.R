@@ -2,57 +2,92 @@
 
 # ------------------------------------------------------------------------------
 # Script R complet pour analyses DArTseq sur Sphyrna mokarran
-# Installation robuste des packages et génération automatique des résultats
+# Installation dans répertoire utilisateur avec gestion des permissions
 # Auteur : Pierre-Louis Stenger
 # Date   : 2025-11-05
 # ------------------------------------------------------------------------------
 
 cat("========================================\n")
+cat("Configuration de l'environnement R\n")
+cat("========================================\n")
+
+# 1. Définir une bibliothèque utilisateur pour les packages
+user_lib <- Sys.getenv("R_LIBS_USER")
+if (user_lib == "") {
+  user_lib <- file.path(Sys.getenv("HOME"), "R", "library")
+}
+
+# Créer le répertoire s'il n'existe pas
+if (!dir.exists(user_lib)) {
+  dir.create(user_lib, recursive = TRUE)
+  cat("Bibliothèque utilisateur créée:", user_lib, "\n")
+}
+
+# Ajouter au chemin de recherche des bibliothèques
+.libPaths(c(user_lib, .libPaths()))
+cat("Bibliothèques R utilisées:\n")
+print(.libPaths())
+
+cat("\n========================================\n")
 cat("Installation des packages nécessaires\n")
 cat("========================================\n")
 
-# 1. Installation BiocManager et packages Bioconductor
-if (!requireNamespace("BiocManager", quietly = TRUE)) {
-  install.packages("BiocManager", repos = "https://cloud.r-project.org/")
+# 2. Fonction d'installation sécurisée
+install_if_missing <- function(pkg, repo = "CRAN") {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    cat("Installation de", pkg, "depuis", repo, "...\n")
+    if (repo == "Bioconductor") {
+      if (!requireNamespace("BiocManager", quietly = TRUE)) {
+        install.packages("BiocManager", lib = user_lib, repos = "https://cloud.r-project.org/")
+      }
+      BiocManager::install(pkg, lib = user_lib, ask = FALSE, update = FALSE)
+    } else {
+      install.packages(pkg, lib = user_lib, repos = "https://cloud.r-project.org/", dependencies = TRUE)
+    }
+  } else {
+    cat(pkg, "déjà installé\n")
+  }
 }
+
+# 3. Installation des packages Bioconductor
+cat("\n--- Installation packages Bioconductor ---\n")
+install_if_missing("BiocManager", "CRAN")
 library(BiocManager)
+install_if_missing("SNPRelate", "Bioconductor")
+install_if_missing("gdsfmt", "Bioconductor")
 
-# Installation des packages Bioconductor requis
-bioc_packages <- c("SNPRelate", "gdsfmt")
-for (pkg in bioc_packages) {
-  if (!requireNamespace(pkg, quietly = TRUE)) {
-    cat("Installation de", pkg, "via Bioconductor...\n")
-    BiocManager::install(pkg, ask = FALSE, update = FALSE)
-  }
+# 4. Installation des packages CRAN de base
+cat("\n--- Installation packages CRAN ---\n")
+essential_packages <- c("tidyverse", "ggplot2", "stringr", "data.table", 
+                        "ade4", "vegan", "ape", "MASS", "reshape2")
+for (pkg in essential_packages) {
+  install_if_missing(pkg, "CRAN")
 }
 
-# 2. Installation des packages CRAN requis
-cran_packages <- c("devtools", "tidyverse", "ggplot2", "stringr", "rmarkdown", 
-                   "adegenet", "ade4", "vegan", "ape", "MASS", "reshape2")
-for (pkg in cran_packages) {
-  if (!requireNamespace(pkg, quietly = TRUE)) {
-    cat("Installation de", pkg, "via CRAN...\n")
-    install.packages(pkg, repos = "https://cloud.r-project.org/", dependencies = TRUE)
-  }
-}
+# 5. Installation de adegenet (dépendance importante)
+cat("\n--- Installation adegenet ---\n")
+install_if_missing("adegenet", "CRAN")
 
-# 3. Installation spéciale de dartR selon la nouvelle approche dartRverse
-cat("Installation de dartRverse...\n")
-if (!requireNamespace("dartRverse", quietly = TRUE)) {
-  install.packages("dartRverse", repos = "https://cloud.r-project.org/")
-}
+# 6. Installation de dartR.data et dartR.base
+cat("\n--- Installation dartR ---\n")
+install_if_missing("dartR.data", "CRAN")
+install_if_missing("dartR.base", "CRAN")
 
-# Chargement des librairies essentielles
-suppressMessages({
-  library(dartRverse)
+# 7. Chargement des librairies
+cat("\n========================================\n")
+cat("Chargement des librairies\n")
+cat("========================================\n")
+
+suppressPackageStartupMessages({
+  library(dartR.base)
   library(tidyverse)
   library(ggplot2)
   library(stringr)
 })
 
-cat("Packages installés avec succès!\n\n")
+cat("Packages chargés avec succès!\n")
 
-# 4. Définition des chemins
+# 8. Définition des chemins
 project_dir   <- "/home/plstenge/sphyrna_mokarran_dartseq"
 raw_data_dir  <- file.path(project_dir, "01_raw_data/Report-DSph25-10737")
 results_dir   <- file.path(project_dir, "03_results")
@@ -66,11 +101,11 @@ dir.create(plots_dir,   showWarnings = FALSE, recursive = TRUE)
 dir.create(tables_dir,  showWarnings = FALSE, recursive = TRUE)
 dir.create(report_dir,  showWarnings = FALSE, recursive = TRUE)
 
-cat("========================================\n")
+cat("\n========================================\n")
 cat("Import et analyse des données DArTseq\n")
 cat("========================================\n")
 
-# 5. Import des données DArTseq
+# 9. Import des données DArTseq
 setwd(raw_data_dir)
 
 # Vérifier la présence du fichier
@@ -91,163 +126,157 @@ cat("Nombre d'individus    :", n_ind, "\n")
 cat("Nombre de loci        :", n_loc, "\n")
 cat("Nombre de populations :", n_pop, "\n\n")
 
-# 6. Sauvegarde des informations de base
+# 10. Sauvegarde des informations de base
 basic_info <- data.frame(
   Metric = c("Nombre_individus", "Nombre_loci", "Nombre_populations"),
   Value = c(n_ind, n_loc, n_pop)
 )
 write.csv(basic_info, file.path(tables_dir, "basic_info.csv"), row.names = FALSE)
 
-# 7. Nettoyage et correction des noms (adapté de votre script original)
+# 11. Nettoyage et correction des noms d'individus
+cat("Correction des noms d'individus...\n")
 ind_names <- indNames(gl)
 
-# Dictionnaire de noms (exemple - à adapter selon vos données)
-name_dict <- c(
-  "MOKARR" = "MOKARR",
-  "HAMMERHEAD" = "HAMMER",
-  "SPHYR" = "SPHYR"
-  # Ajoutez vos corrections ici
-)
+# Dictionnaire de correction (à adapter selon vos besoins)
+# Exemple simple : nettoyer les espaces et caractères spéciaux
+ind_names_clean <- str_replace_all(ind_names, "[^[:alnum:]_-]", "_")
+indNames(gl) <- ind_names_clean
 
-# Application des corrections si nécessaire
-corrected_names <- ind_names
-for (old_name in names(name_dict)) {
-  corrected_names <- str_replace_all(corrected_names, old_name, name_dict[old_name])
-}
-indNames(gl) <- corrected_names
-
-# Définition des populations basée sur les préfixes (exemple)
+# Définition des populations si besoin
 if (n_pop <= 1) {
-  # Créer des populations basées sur les premiers caractères des noms
-  pop_codes <- str_sub(corrected_names, 1, 3)
+  # Créer des populations basées sur les 3 premiers caractères
+  pop_codes <- str_sub(ind_names_clean, 1, 3)
   pop(gl) <- as.factor(pop_codes)
-  cat("Populations redéfinies basées sur les préfixes des noms\n")
+  cat("Populations définies basées sur les préfixes des noms\n")
+  cat("Populations identifiées:", length(unique(pop(gl))), "\n")
 }
 
-# 8. Filtrages qualité
-cat("========================================\n")
+# 12. Filtrages qualité
+cat("\n========================================\n")
 cat("Filtrages qualité\n")
 cat("========================================\n")
 
-# Statistiques avant filtrage
 cat("Avant filtrage - Loci:", nLoc(gl), "Individus:", nInd(gl), "\n")
 
-# Filtrage par RepAvg (si disponible)
+# Filtrage par RepAvg si disponible
 if ("RepAvg" %in% names(gl@other$loc.metrics)) {
-  gl <- gl.filter.repavg(gl, threshold = 0.95, verbose = TRUE)
+  cat("Filtrage RepAvg >= 0.95...\n")
+  gl <- gl.filter.repavg(gl, threshold = 0.95, verbose = 3)
   cat("Après filtrage RepAvg - Loci:", nLoc(gl), "\n")
 }
 
 # Filtrage par CallRate
-gl <- gl.filter.callrate(gl, method = "loc", threshold = 0.80, verbose = TRUE)
+cat("Filtrage CallRate >= 0.80...\n")
+gl <- gl.filter.callrate(gl, method = "loc", threshold = 0.80, verbose = 3)
 cat("Après filtrage CallRate - Loci:", nLoc(gl), "\n")
 
 # Suppression des loci monomorphes
-gl <- gl.filter.monomorphs(gl, verbose = TRUE)
+cat("Suppression des loci monomorphes...\n")
+gl <- gl.filter.monomorphs(gl, verbose = 3)
 cat("Après suppression monomorphes - Loci:", nLoc(gl), "\n")
 
 # Sauvegarde des statistiques de filtrage
 filtering_stats <- data.frame(
-  Step = c("Initial", "After_RepAvg", "After_CallRate", "After_Monomorphs"),
-  N_Loci = c(n_loc, nLoc(gl), nLoc(gl), nLoc(gl)),
-  N_Individuals = c(n_ind, nInd(gl), nInd(gl), nInd(gl))
+  Step = c("Initial", "Final"),
+  N_Loci = c(n_loc, nLoc(gl)),
+  N_Individuals = c(n_ind, nInd(gl))
 )
 write.csv(filtering_stats, file.path(tables_dir, "filtering_statistics.csv"), row.names = FALSE)
 
-# 9. Analyses de génétique des populations
-cat("========================================\n")
-cat("Analyses génétiques\n")
+# 13. Analyses génétiques
+cat("\n========================================\n")
+cat("Analyses de génétique des populations\n")
 cat("========================================\n")
 
-# 9.1 Calcul de l'hétérozygotie
+# 13.1 Hétérozygotie
 cat("Calcul de l'hétérozygotie...\n")
 het_results <- gl.report.heterozygosity(gl, method = "pop")
 write.csv(het_results, file.path(tables_dir, "heterozygosity_by_pop.csv"), row.names = FALSE)
 
-# 9.2 PCoA
-cat("Analyse en coordonnées principales (PCoA)...\n")
-pcoa_result <- gl.pcoa(gl, nf = 3)
+# 13.2 PCoA
+cat("Analyse en Coordonnées Principales (PCoA)...\n")
+pcoa_result <- gl.pcoa(gl, nfactors = 3)
 
-# Extraction et sauvegarde des scores PCoA
+# Extraction des scores
 pcoa_scores <- as.data.frame(pcoa_result$scores)
 pcoa_scores$Individual <- rownames(pcoa_scores)
-pcoa_scores$Population <- pop(gl)
+pcoa_scores$Population <- as.character(pop(gl))
 write.csv(pcoa_scores, file.path(tables_dir, "pcoa_scores.csv"), row.names = FALSE)
 
-# 9.3 Calcul de Fst entre populations (si plus d'une population)
+# 13.3 Fst entre populations (si applicable)
 if (nPop(gl) > 1) {
   cat("Calcul des Fst entre populations...\n")
   fst_matrix <- gl.fst.pop(gl)
   write.csv(as.matrix(fst_matrix), file.path(tables_dir, "fst_matrix.csv"), row.names = TRUE)
 }
 
-# 10. Génération des graphiques
-cat("========================================\n")
+# 14. Génération des graphiques
+cat("\n========================================\n")
 cat("Génération des graphiques\n")
 cat("========================================\n")
 
-# 10.1 Plot PCoA
+# 14.1 PCoA plot
+var_explained <- pcoa_result$eig / sum(pcoa_result$eig) * 100
+
 p_pcoa <- ggplot(pcoa_scores, aes(x = Axis1, y = Axis2, color = Population)) +
   geom_point(size = 3, alpha = 0.7) +
-  stat_ellipse(aes(group = Population), type = "norm", level = 0.95) +
   labs(title = "Analyse en Coordonnées Principales (PCoA)",
-       x = paste0("PC1 (", round(pcoa_result$eig[1]/sum(pcoa_result$eig)*100, 1), "%)"),
-       y = paste0("PC2 (", round(pcoa_result$eig[2]/sum(pcoa_result$eig)*100, 1), "%)")) +
+       x = paste0("PC1 (", round(var_explained[1], 1), "%)"),
+       y = paste0("PC2 (", round(var_explained[2], 1), "%)")) +
   theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5))
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"))
 
 ggsave(file.path(plots_dir, "pcoa_analysis.png"), p_pcoa, width = 10, height = 8, dpi = 300)
+cat("PCoA plot sauvegardé\n")
 
-# 10.2 Barplot hétérozygotie
+# 14.2 Hétérozygotie barplot
 if (nrow(het_results) > 1) {
   p_het <- ggplot(het_results, aes(x = pop, y = Ho)) +
     geom_bar(stat = "identity", fill = "steelblue", alpha = 0.7) +
-    geom_errorbar(aes(ymin = Ho - 0.01, ymax = Ho + 0.01), width = 0.2) +
     labs(title = "Hétérozygotie Observée par Population",
          x = "Population", y = "Hétérozygotie Observée (Ho)") +
     theme_minimal() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1),
-          plot.title = element_text(hjust = 0.5))
+          plot.title = element_text(hjust = 0.5, size = 14, face = "bold"))
   
   ggsave(file.path(plots_dir, "heterozygosity_barplot.png"), p_het, width = 8, height = 6, dpi = 300)
+  cat("Hétérozygotie barplot sauvegardé\n")
 }
 
-# 10.3 Heatmap Fst (si plus d'une population)
+# 14.3 Heatmap Fst
 if (nPop(gl) > 1 && exists("fst_matrix")) {
   fst_df <- expand.grid(Pop1 = rownames(fst_matrix), Pop2 = colnames(fst_matrix))
   fst_df$Fst <- as.vector(as.matrix(fst_matrix))
   
   p_fst <- ggplot(fst_df, aes(x = Pop1, y = Pop2, fill = Fst)) +
     geom_tile() +
-    scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+    scale_fill_gradient2(low = "blue", mid = "white", high = "red", 
+                         midpoint = median(fst_df$Fst, na.rm = TRUE)) +
     labs(title = "Matrice de Fst entre Populations", x = "", y = "") +
     theme_minimal() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1),
-          plot.title = element_text(hjust = 0.5))
+          plot.title = element_text(hjust = 0.5, size = 14, face = "bold"))
   
   ggsave(file.path(plots_dir, "fst_heatmap.png"), p_fst, width = 8, height = 6, dpi = 300)
+  cat("Fst heatmap sauvegardé\n")
 }
 
-# 11. Création du rapport
-cat("========================================\n")
+# 15. Création du rapport
+cat("\n========================================\n")
 cat("Génération du rapport\n")
 cat("========================================\n")
 
-# Création du rapport markdown
 report_file <- file.path(report_dir, "rapport_dartseq.md")
 
-# En-tête du rapport
 cat("# Rapport d'Analyse DArTseq - Sphyrna mokarran\n\n", file = report_file)
 cat("**Date d'analyse :** ", as.character(Sys.Date()), "\n", file = report_file, append = TRUE)
 cat("**Auteur :** Pierre-Louis Stenger\n\n", file = report_file, append = TRUE)
 
-# Résumé des données
 cat("## Résumé des données\n\n", file = report_file, append = TRUE)
 cat("- **Nombre d'individus :** ", nInd(gl), "\n", file = report_file, append = TRUE)
 cat("- **Nombre de loci (après filtrage) :** ", nLoc(gl), "\n", file = report_file, append = TRUE)
 cat("- **Nombre de populations :** ", nPop(gl), "\n\n", file = report_file, append = TRUE)
 
-# Liste des fichiers générés
 cat("## Fichiers générés\n\n", file = report_file, append = TRUE)
 cat("### Tables (.csv)\n", file = report_file, append = TRUE)
 table_files <- list.files(tables_dir, pattern = "\\.csv$")
@@ -261,16 +290,9 @@ for (f in plot_files) {
   cat("- ", f, "\n", file = report_file, append = TRUE)
 }
 
-# Conversion en HTML si possible
-html_file <- file.path(report_dir, "rapport_dartseq.html")
-if (requireNamespace("rmarkdown", quietly = TRUE)) {
-  try({
-    rmarkdown::render(report_file, output_file = html_file, quiet = TRUE)
-    cat("Rapport HTML généré :", html_file, "\n")
-  }, silent = TRUE)
-}
+# Sauvegarde de l'objet genlight final
+save(gl, file = file.path(results_dir, "genlight_filtered.RData"))
 
-# Résumé final
 cat("\n========================================\n")
 cat("ANALYSE TERMINÉE AVEC SUCCÈS!\n")
 cat("========================================\n")
@@ -278,7 +300,4 @@ cat("Résultats disponibles dans :", results_dir, "\n")
 cat("- Tables :", length(list.files(tables_dir)), "fichiers\n")
 cat("- Graphiques :", length(list.files(plots_dir)), "fichiers\n")
 cat("- Rapport :", report_file, "\n")
-
-# Sauvegarde de l'objet genlight final
-save(gl, file = file.path(results_dir, "genlight_filtered.RData"))
-cat("Objet genlight sauvegardé : genlight_filtered.RData\n")
+cat("- Objet genlight : genlight_filtered.RData\n")
